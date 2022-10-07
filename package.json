@@ -1,6 +1,6 @@
 {
   "name": "@aikon/network-vcr",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Simple tool for recording and playing back network requests in tests",
   "main": "./dist/main.js",
   "types": "./dist/main.d.ts",
