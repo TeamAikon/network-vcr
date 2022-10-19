@@ -9,7 +9,7 @@ interface VCROptions {
   CI: boolean
 }
 
-export async function startVCR(options?: Partial<VCROptions>): Promise<void> {
+export async function startVCR(options?: Partial<VCROptions>): Promise<nock.Scope[]> {
   const { processDefns, CI } = { processDefns: defns => defns, CI: process.env.CI, ...options } as VCROptions
   const defns = await currentCassettes()
   if (!defns.length) {
@@ -21,9 +21,12 @@ export async function startVCR(options?: Partial<VCROptions>): Promise<void> {
   } else {
     // Cassettes found - using saved responses
     // set up the mocks
-    nock.define(processDefns(defns))
+    const scopes = nock.define(processDefns(defns.map(relaxDefinitionsForJsonRPC)))
+    scopes.forEach(matchJsonRPCResponseToRequest)
     if (!nock.isActive()) nock.activate()
+    return scopes
   }
+  return []
 }
 
 export async function stopVCR() {
@@ -76,4 +79,34 @@ async function currentCassettes(): Promise<nock.Definition[]> {
   const cassettes = await readCassetteFile()
   const testName = expect.getState().currentTestName
   return (testName && cassettes[testName]) || []
+}
+
+/**
+ * Modify definitions to match on any id
+ */
+function relaxDefinitionsForJsonRPC(defn: nock.Definition) {
+  if (defn.body?.hasOwnProperty('jsonrpc')) {
+    return {
+      ...defn,
+      body: {
+        ...(defn.body as object),
+        id: /\d+/,
+      },
+    }
+  }
+  return defn
+}
+
+/**
+ * When handling JsonRPC requests, respond with the same id that was requested
+ */
+function matchJsonRPCResponseToRequest(scope: nock.Scope) {
+  scope.on('request', (req, interceptor, requestBodyString) => {
+    const requestBody = JSON.parse(requestBodyString)
+    if (requestBody.hasOwnProperty('jsonrpc')) {
+      const responseBody = JSON.parse(interceptor.body)
+      responseBody.id = requestBody.id
+      interceptor.body = JSON.stringify(responseBody)
+    }
+  })
 }
