@@ -537,5 +537,7 @@
       ],
       "responseIsBinary": false
     }
-  ]
+  ],
+  "VCR CI should accept empty a cassette": [],
+  "VCR an empty cassette must be filled when a request is made": []
 }
