@@ -539,5 +539,6 @@
     }
   ],
   "VCR CI should accept empty a cassette": [],
-  "VCR an empty cassette must be filled when a request is made": []
+  "VCR an empty cassette must be filled when a request is made": [],
+  "VCR CI should not update a empty cassette": []
 }

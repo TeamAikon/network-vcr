@@ -86,6 +86,18 @@ describe('VCR', () => {
     )
   })
 
+  it('CI should not update a empty cassette', async () => {
+    let cassettes = await getAllCassettes()
+    expect(cassettes['VCR CI should not update a empty cassette']).toEqual([])
+    await expect(
+      startVCR({ CI: true }), // we to simulate a CI environment
+    ).resolves.toBeTruthy()
+    await fetch('http://example.com')
+    await stopVCR()
+    cassettes = await getAllCassettes()
+    expect(cassettes['VCR CI should not update a empty cassette']).toEqual([])
+  })
+
   /**
    * Scramble the ids so we know they don't matter
    * Update the second chainId response body to '0x6' so we can tell if this mock is used

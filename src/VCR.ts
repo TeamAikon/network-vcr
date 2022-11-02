@@ -12,19 +12,24 @@ interface VCROptions {
 export async function startVCR(options?: Partial<VCROptions>): Promise<nock.Scope[]> {
   const { processDefns, CI } = { processDefns: defns => defns, CI: process.env.CI, ...options } as VCROptions
   const defns = await currentCassettes()
-  if (typeof defns === 'undefined' || !defns.length) {
-    if (CI && typeof defns === 'undefined') {
-      throw new Error(`No cassettes found. They must be in place before running tests on CI ${cassettePath()}`)
-    }
-    // No cassettes found - recording responses
-    nock.recorder.rec({ output_objects: true, dont_print: true })
-  } else {
+
+  if (CI && typeof defns === 'undefined') {
+    throw new Error(`No cassettes found. They must be in place before running tests on CI ${cassettePath()}`)
+  }
+
+  if (defns && !!defns.length) {
     // Cassettes found - using saved responses
     // set up the mocks
     const scopes = nock.define(processDefns(defns.map(relaxDefinitionsForJsonRPC)))
     scopes.forEach(matchJsonRPCResponseToRequest)
     if (!nock.isActive()) nock.activate()
     return scopes
+  }
+
+  const shouldRecord = !CI && (typeof defns === 'undefined' || !!defns.length)
+  if (shouldRecord) {
+    // No cassettes found - recording responses
+    nock.recorder.rec({ output_objects: true, dont_print: true })
   }
   return []
 }
