@@ -22,6 +22,16 @@ interface ChainConfig {
 
 const cassettePath = './src/__cassettes__'
 
+const getAllCassettes = async () => {
+  let cassetteBuffer: Buffer
+  try {
+    cassetteBuffer = await fs.readFile(__dirname + '/__cassettes__/VCR.cassette.json')
+  } catch (err) {
+    return {}
+  }
+  return JSON.parse(cassetteBuffer.toString())
+}
+
 // our cassettes will be manipulated by tests but we don't want tests to affect each other
 beforeEach(async () => {
   // backup cassettes
@@ -52,18 +62,48 @@ describe('VCR', () => {
     expect(cassetteDir).toEqual(['VCR.cassette.json'])
   })
 
+  it('CI should accept empty a cassette', async () => {
+    const cassettes = await getAllCassettes()
+    expect(cassettes['VCR CI should accept empty a cassette']).toEqual([])
+    await expect(
+      startVCR({ CI: true }), // we to simulate a CI environment
+    ).resolves.toBeTruthy()
+    await stopVCR()
+  })
+
+  it('CI should throw an error if has no cassette', async () => {
+    const cassettes = await getAllCassettes()
+    expect(cassettes['VCR CI should throw an error if has no cassette']).toBeUndefined()
+
+    expect(
+      startVCR({ CI: true }), // we to simulate a CI environment
+    ).rejects.toEqual(
+      new Error(
+        `No cassettes found. They must be in place before running tests on CI ${
+          __dirname + '/__cassettes__/VCR.cassette.json'
+        }`,
+      ),
+    )
+  })
+
+  it('CI should not update a empty cassette', async () => {
+    let cassettes = await getAllCassettes()
+    expect(cassettes['VCR CI should not update a empty cassette']).toEqual([])
+    await expect(
+      startVCR({ CI: true }), // we to simulate a CI environment
+    ).resolves.toBeTruthy()
+    await fetch('http://example.com')
+    await stopVCR()
+    cassettes = await getAllCassettes()
+    expect(cassettes['VCR CI should not update a empty cassette']).toEqual([])
+  })
+
   /**
    * Scramble the ids so we know they don't matter
    * Update the second chainId response body to '0x6' so we can tell if this mock is used
    */
   async function manipulateCassettesForTesting() {
-    let cassetteBuffer: Buffer
-    try {
-      cassetteBuffer = await fs.readFile(__dirname + '/__cassettes__/VCR.cassette.json')
-    } catch (err) {
-      return false
-    }
-    const allCassettes = JSON.parse(cassetteBuffer.toString())
+    const allCassettes = await getAllCassettes()
     const cassettes = allCassettes['VCR works with json rpc']
     if (!cassettes) return false
 
@@ -106,5 +146,17 @@ describe('VCR', () => {
     await chain.connect()
     expect(chain.chainId).toEqual('6')
     await stopVCR()
+  })
+
+  it('Should create an empty cassette when no request was made', async () => {
+    let cassettes = await getAllCassettes()
+    expect(cassettes['VCR Should create an empty cassette when no request was made']).toBeUndefined()
+
+    await startVCR({ CI: false }) // we want make the real request, even on CI
+    await stopVCR()
+
+    // The empty cassette has been created
+    cassettes = await getAllCassettes()
+    expect(cassettes['VCR Should create an empty cassette when no request was made']).toEqual([])
   })
 })

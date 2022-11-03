@@ -12,13 +12,12 @@ interface VCROptions {
 export async function startVCR(options?: Partial<VCROptions>): Promise<nock.Scope[]> {
   const { processDefns, CI } = { processDefns: defns => defns, CI: process.env.CI, ...options } as VCROptions
   const defns = await currentCassettes()
-  if (!defns.length) {
-    if (CI) {
-      throw new Error(`No cassettes found. They must be in place before running tests on CI ${cassettePath()}`)
-    }
-    // No cassettes found - recording responses
-    nock.recorder.rec({ output_objects: true, dont_print: true })
-  } else {
+
+  if (CI && typeof defns === 'undefined') {
+    throw new Error(`No cassettes found. They must be in place before running tests on CI ${cassettePath()}`)
+  }
+
+  if (defns && !!defns.length) {
     // Cassettes found - using saved responses
     // set up the mocks
     const scopes = nock.define(processDefns(defns.map(relaxDefinitionsForJsonRPC)))
@@ -26,16 +25,20 @@ export async function startVCR(options?: Partial<VCROptions>): Promise<nock.Scop
     if (!nock.isActive()) nock.activate()
     return scopes
   }
+
+  const shouldRecord = !CI && (typeof defns === 'undefined' || defns.length === 0)
+  if (shouldRecord) {
+    // No cassettes found - recording responses
+    nock.recorder.rec({ output_objects: true, dont_print: true })
+  }
   return []
 }
 
 export async function stopVCR() {
   const defns = nock.recorder.play() as nock.Definition[]
-
   nock.recorder.clear()
-  if (defns.length) {
-    await saveCassettes(defns)
-  }
+  // even when not has to call any external api we should save the cassettes (an empty array [])
+  await saveCassettes(defns)
   nock.restore()
   nock.cleanAll()
 }
@@ -75,10 +78,10 @@ async function readCassetteFile(): Promise<CassetteFile> {
   }
 }
 
-async function currentCassettes(): Promise<nock.Definition[]> {
+async function currentCassettes(): Promise<nock.Definition[] | undefined> {
   const cassettes = await readCassetteFile()
   const testName = expect.getState().currentTestName
-  return (testName && cassettes[testName]) || []
+  return (testName && cassettes[testName]) || undefined
 }
 
 /**

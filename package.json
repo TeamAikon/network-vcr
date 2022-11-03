@@ -1,6 +1,6 @@
 {
   "name": "@aikon/network-vcr",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Simple tool for recording and playing back network requests in tests",
   "main": "./dist/main.js",
   "types": "./dist/main.d.ts",
@@ -19,11 +19,11 @@
   },
   "author": "AIKON",
   "license": "MIT",
-  "dependencies": {},
   "devDependencies": {
     "@open-rights-exchange/chain-js": "^4.9.1",
     "@open-rights-exchange/chain-js-plugin-ethereum": "^4.12.0",
     "@types/jest": "^29.1.2",
+    "@types/nock": "^11.1.0",
     "@types/node-fetch": "^2.6.2",
     "jest": "^29.1.2",
     "nock": "^13.2.9",
