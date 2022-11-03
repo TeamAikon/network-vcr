@@ -26,7 +26,7 @@ export async function startVCR(options?: Partial<VCROptions>): Promise<nock.Scop
     return scopes
   }
 
-  const shouldRecord = !CI && (typeof defns === 'undefined' || !defns.length)
+  const shouldRecord = !CI && (typeof defns === 'undefined' || defns.length === 0)
   if (shouldRecord) {
     // No cassettes found - recording responses
     nock.recorder.rec({ output_objects: true, dont_print: true })
