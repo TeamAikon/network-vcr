@@ -20,6 +20,24 @@ interface ChainConfig {
   }
 }
 
+const getChainConfig = () => {
+  const chainConfig: ChainConfig = {
+    chainType: Models.ChainType.EthereumV1,
+    endpoints: [{ url: 'https://goerli.infura.io/v3/b1664813d49f45c7a5bb42a395447977' }],
+    chainSettings: {
+      chainForkType: {
+        chainName: 'goerli',
+        hardFork: 'istanbul',
+      },
+      defaultTransactionSettings: {
+        maxFeeIncreasePercentage: 20,
+        executionPriority: Models.TxExecutionPriority.Fast,
+      },
+    },
+  }
+  return chainConfig
+}
+
 const cassettePath = './src/__cassettes__'
 
 const getAllCassettes = async () => {
@@ -32,8 +50,33 @@ const getAllCassettes = async () => {
   return JSON.parse(cassetteBuffer.toString())
 }
 
+const getCassetteToCurrentTest = async () => {
+  const testName = expect.getState().currentTestName
+  if (!testName) throw new Error('No test name found')
+  const allCassettes = await getAllCassettes()
+  return allCassettes[testName]
+}
+
+/**
+ * Scramble the ids so we know they don't matter
+ * Update the second chainId response body to '0x6' so we can tell if this mock is used
+ */
+async function manipulateCassettesForTesting() {
+  const allCassettes = await getAllCassettes()
+  const cassettes = allCassettes['VCR works with json rpc']
+  if (!cassettes) return false
+
+  cassettes.forEach((mock: any) => {
+    mock.body.id = Math.round(Math.random() * 100)
+  })
+  cassettes[5].response.result = '0x6'
+  await fs.writeFile(__dirname + '/__cassettes__/VCR.cassette.json', JSON.stringify(allCassettes, null, 2))
+  return true
+}
+
 // our cassettes will be manipulated by tests but we don't want tests to affect each other
 beforeEach(async () => {
+  nock.enableNetConnect()
   // backup cassettes
   try {
     await fs.cp(cassettePath, cassettePath + 'BAK', { recursive: true })
@@ -63,8 +106,8 @@ describe('VCR', () => {
   })
 
   it('CI should accept empty a cassette', async () => {
-    const cassettes = await getAllCassettes()
-    expect(cassettes['VCR CI should accept empty a cassette']).toEqual([])
+    const cassette = await getCassetteToCurrentTest()
+    expect(cassette).toEqual([])
     await expect(
       startVCR({ CI: true }), // we to simulate a CI environment
     ).resolves.toBeTruthy()
@@ -72,8 +115,8 @@ describe('VCR', () => {
   })
 
   it('CI should throw an error if has no cassette', async () => {
-    const cassettes = await getAllCassettes()
-    expect(cassettes['VCR CI should throw an error if has no cassette']).toBeUndefined()
+    const cassette = await getCassetteToCurrentTest()
+    expect(cassette).toBeUndefined()
 
     expect(
       startVCR({ CI: true }), // we to simulate a CI environment
@@ -87,53 +130,22 @@ describe('VCR', () => {
   })
 
   it('CI should not update a empty cassette', async () => {
-    let cassettes = await getAllCassettes()
-    expect(cassettes['VCR CI should not update a empty cassette']).toEqual([])
+    let cassette = await getCassetteToCurrentTest()
+    expect(cassette).toEqual([])
     await expect(
       startVCR({ CI: true }), // we to simulate a CI environment
     ).resolves.toBeTruthy()
     await fetch('http://example.com')
     await stopVCR()
-    cassettes = await getAllCassettes()
-    expect(cassettes['VCR CI should not update a empty cassette']).toEqual([])
+    cassette = await getCassetteToCurrentTest()
+    expect(cassette).toEqual([])
   })
-
-  /**
-   * Scramble the ids so we know they don't matter
-   * Update the second chainId response body to '0x6' so we can tell if this mock is used
-   */
-  async function manipulateCassettesForTesting() {
-    const allCassettes = await getAllCassettes()
-    const cassettes = allCassettes['VCR works with json rpc']
-    if (!cassettes) return false
-
-    cassettes.forEach((mock: any) => {
-      mock.body.id = Math.round(Math.random() * 100)
-    })
-    cassettes[5].response.result = '0x6'
-    await fs.writeFile(__dirname + '/__cassettes__/VCR.cassette.json', JSON.stringify(allCassettes, null, 2))
-    return true
-  }
-
-  const chainConfig: ChainConfig = {
-    chainType: Models.ChainType.EthereumV1,
-    endpoints: [{ url: 'https://goerli.infura.io/v3/b1664813d49f45c7a5bb42a395447977' }],
-    chainSettings: {
-      chainForkType: {
-        chainName: 'goerli',
-        hardFork: 'istanbul',
-      },
-      defaultTransactionSettings: {
-        maxFeeIncreasePercentage: 20,
-        executionPriority: Models.TxExecutionPriority.Fast,
-      },
-    },
-  }
 
   it('works with json rpc', async () => {
     nock.disableNetConnect()
-    await manipulateCassettesForTesting()
+    const chainConfig = getChainConfig()
 
+    await manipulateCassettesForTesting()
     await startVCR()
     const chain = PluginChainFactory(
       [EthereumPlugin],
@@ -149,14 +161,68 @@ describe('VCR', () => {
   })
 
   it('Should create an empty cassette when no request was made', async () => {
-    let cassettes = await getAllCassettes()
-    expect(cassettes['VCR Should create an empty cassette when no request was made']).toBeUndefined()
+    let cassette = await getCassetteToCurrentTest()
+    expect(cassette).toBeUndefined()
 
     await startVCR({ CI: false }) // we want make the real request, even on CI
     await stopVCR()
 
     // The empty cassette has been created
-    cassettes = await getAllCassettes()
-    expect(cassettes['VCR Should create an empty cassette when no request was made']).toEqual([])
+    cassette = await getCassetteToCurrentTest()
+    expect(cassette).toEqual([])
+  })
+
+  it('Should not clear current cassette', async () => {
+    let cassette = await getCassetteToCurrentTest()
+    const before = cassette
+    expect(before).toHaveLength(1)
+
+    await startVCR({ CI: false }) // we want make the real request, even on CI
+    await fetch('http://example.com')
+    await stopVCR()
+
+    cassette = await getCassetteToCurrentTest()
+    expect(before).toEqual(cassette)
+  })
+
+  it('Should not update an existing cassette', async () => {
+    let cassette = await getCassetteToCurrentTest()
+    const before = cassette
+    expect(before).toHaveLength(1)
+
+    await startVCR({ CI: false }) // we want make the real request, even on CI
+    await fetch('http://example.com')
+    await expect(fetch('http://example.com')).rejects.toThrow()
+    await stopVCR()
+
+    cassette = await getCassetteToCurrentTest()
+    expect(before).toEqual(cassette)
+  })
+
+  it('Should not cahnge a current cassette if the requests change', async () => {
+    let cassette = await getCassetteToCurrentTest()
+    const before: any[] = cassette
+
+    expect(before).toHaveLength(1)
+    // Make shure, that we have no records for "example2.com"
+    before.forEach(({ scope }) => {
+      expect(scope).not.toEqual('http://example2.com:80')
+    })
+
+    await startVCR({ CI: false }) // we want make the real request, even on CI
+    await fetch('http://example2.com')
+    await stopVCR()
+
+    cassette = await getCassetteToCurrentTest()
+    expect(before).toEqual(cassette)
+
+    // check this also works if connection is disabled
+    nock.disableNetConnect()
+    await startVCR({ CI: false }) // we want make the real request, even on CI
+    await expect(fetch('http://example2.com')).rejects.toThrow()
+    await stopVCR()
+
+    cassette = await getCassetteToCurrentTest()
+    expect(before).toEqual(cassette)
   })
 })
