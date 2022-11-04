@@ -176,4 +176,18 @@ describe('VCR', () => {
     cassettes = await getAllCassettes()
     expect(before).toEqual(cassettes['VCR Should not clear current cassette'])
   })
+
+  it('Should not update an existing cassette', async () => {
+    let cassettes = await getAllCassettes()
+    const before = cassettes['VCR Should not update an existing cassette']
+    expect(before).toHaveLength(1)
+
+    await startVCR({ CI: false }) // we want make the real request, even on CI
+    await fetch('http://example.com')
+    await expect(fetch('http://example.com')).rejects.toThrow()
+    await stopVCR()
+
+    cassettes = await getAllCassettes()
+    expect(before).toEqual(cassettes['VCR Should not update an existing cassette'])
+  })
 })

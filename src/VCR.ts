@@ -62,10 +62,11 @@ async function writeCassetteFile(cassettes: CassetteFile): Promise<void> {
 async function saveCassettes(defns: nock.Definition[]): Promise<void> {
   const cassettes: CassetteFile = await readCassetteFile()
   const testName = expect.getState().currentTestName
+
   if (!testName) return
 
-  const hasCasset = cassettes[testName] && !!cassettes[testName].length
-  if (!defns.length && hasCasset) return
+  // we should only update a casset to a empty array when has no cassette to this test
+  if (defns.length === 0 && typeof cassettes[testName] !== 'undefined') return
 
   cassettes[testName] = defns
   await writeCassetteFile(cassettes)
