@@ -62,10 +62,13 @@ async function writeCassetteFile(cassettes: CassetteFile): Promise<void> {
 async function saveCassettes(defns: nock.Definition[]): Promise<void> {
   const cassettes: CassetteFile = await readCassetteFile()
   const testName = expect.getState().currentTestName
-  if (testName) {
-    cassettes[testName] = defns
-    await writeCassetteFile(cassettes)
-  }
+  if (!testName) return
+
+  const hasCasset = cassettes[testName] && !!cassettes[testName].length
+  if (!defns.length && hasCasset) return
+
+  cassettes[testName] = defns
+  await writeCassetteFile(cassettes)
 }
 
 async function readCassetteFile(): Promise<CassetteFile> {
@@ -105,6 +108,9 @@ function relaxDefinitionsForJsonRPC(defn: nock.Definition) {
  */
 function matchJsonRPCResponseToRequest(scope: nock.Scope) {
   scope.on('request', (req, interceptor, requestBodyString) => {
+    // body can be empty string. In that case, we can't parse it
+    if (!requestBodyString) return
+
     const requestBody = JSON.parse(requestBodyString)
     if (requestBody.hasOwnProperty('jsonrpc')) {
       const responseBody = JSON.parse(interceptor.body)

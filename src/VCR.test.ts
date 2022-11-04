@@ -20,6 +20,24 @@ interface ChainConfig {
   }
 }
 
+const getChainConfig = () => {
+  const chainConfig: ChainConfig = {
+    chainType: Models.ChainType.EthereumV1,
+    endpoints: [{ url: 'https://goerli.infura.io/v3/b1664813d49f45c7a5bb42a395447977' }],
+    chainSettings: {
+      chainForkType: {
+        chainName: 'goerli',
+        hardFork: 'istanbul',
+      },
+      defaultTransactionSettings: {
+        maxFeeIncreasePercentage: 20,
+        executionPriority: Models.TxExecutionPriority.Fast,
+      },
+    },
+  }
+  return chainConfig
+}
+
 const cassettePath = './src/__cassettes__'
 
 const getAllCassettes = async () => {
@@ -30,6 +48,23 @@ const getAllCassettes = async () => {
     return {}
   }
   return JSON.parse(cassetteBuffer.toString())
+}
+
+/**
+ * Scramble the ids so we know they don't matter
+ * Update the second chainId response body to '0x6' so we can tell if this mock is used
+ */
+async function manipulateCassettesForTesting() {
+  const allCassettes = await getAllCassettes()
+  const cassettes = allCassettes['VCR works with json rpc']
+  if (!cassettes) return false
+
+  cassettes.forEach((mock: any) => {
+    mock.body.id = Math.round(Math.random() * 100)
+  })
+  cassettes[5].response.result = '0x6'
+  await fs.writeFile(__dirname + '/__cassettes__/VCR.cassette.json', JSON.stringify(allCassettes, null, 2))
+  return true
 }
 
 // our cassettes will be manipulated by tests but we don't want tests to affect each other
@@ -98,42 +133,11 @@ describe('VCR', () => {
     expect(cassettes['VCR CI should not update a empty cassette']).toEqual([])
   })
 
-  /**
-   * Scramble the ids so we know they don't matter
-   * Update the second chainId response body to '0x6' so we can tell if this mock is used
-   */
-  async function manipulateCassettesForTesting() {
-    const allCassettes = await getAllCassettes()
-    const cassettes = allCassettes['VCR works with json rpc']
-    if (!cassettes) return false
-
-    cassettes.forEach((mock: any) => {
-      mock.body.id = Math.round(Math.random() * 100)
-    })
-    cassettes[5].response.result = '0x6'
-    await fs.writeFile(__dirname + '/__cassettes__/VCR.cassette.json', JSON.stringify(allCassettes, null, 2))
-    return true
-  }
-
-  const chainConfig: ChainConfig = {
-    chainType: Models.ChainType.EthereumV1,
-    endpoints: [{ url: 'https://goerli.infura.io/v3/b1664813d49f45c7a5bb42a395447977' }],
-    chainSettings: {
-      chainForkType: {
-        chainName: 'goerli',
-        hardFork: 'istanbul',
-      },
-      defaultTransactionSettings: {
-        maxFeeIncreasePercentage: 20,
-        executionPriority: Models.TxExecutionPriority.Fast,
-      },
-    },
-  }
-
   it('works with json rpc', async () => {
     nock.disableNetConnect()
-    await manipulateCassettesForTesting()
+    const chainConfig = getChainConfig()
 
+    await manipulateCassettesForTesting()
     await startVCR()
     const chain = PluginChainFactory(
       [EthereumPlugin],
@@ -158,5 +162,18 @@ describe('VCR', () => {
     // The empty cassette has been created
     cassettes = await getAllCassettes()
     expect(cassettes['VCR Should create an empty cassette when no request was made']).toEqual([])
+  })
+
+  it('Should not clear current cassette', async () => {
+    let cassettes = await getAllCassettes()
+    const before = cassettes['VCR Should not clear current cassette']
+    expect(before).toHaveLength(1)
+
+    await startVCR({ CI: false }) // we want make the real request, even on CI
+    await fetch('http://example.com')
+    await stopVCR()
+
+    cassettes = await getAllCassettes()
+    expect(before).toEqual(cassettes['VCR Should not clear current cassette'])
   })
 })
